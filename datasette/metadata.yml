@@ -1,0 +1,163 @@
+title: Activity Heat
+description_html: |-
+  Fitness activities imported from GPX/TCX files.
+  Start with <a href="/activities/activities">activities</a> or one of the
+  <a href="/activities#queries">canned queries</a>.
+plugins:
+  datasette-leaflet-geojson:
+    default_maps_to_load: 10
+databases:
+  activities:
+    tables:
+      activities:
+        description: >-
+          One row per real-world activity after merging duplicate exports and
+          overlapping recordings (watch + handheld GPS). Times are UTC unless the
+          column says "local". Metrics are null when the source lacked the data.
+        sort_desc: start_utc
+        facets: [sport, sport_category, year, has_gps, has_hr]
+        label_column: name
+        units:
+          distance_m: m
+          gps_distance_m: m
+          ascent_m: m
+          descent_m: m
+          min_elevation_m: m
+          max_elevation_m: m
+          elapsed_s: s
+          timer_s: s
+          moving_s: s
+          duration_s: s
+          avg_speed_ms: m/s
+          max_speed_ms: m/s
+        plugins:
+          datasette-cluster-map:
+            latitude_column: start_lat
+            longitude_column: start_lon
+        columns:
+          sport: Normalized sport (see config/sports.toml)
+          sport_source: Which hint decided the sport (override, rule, file_label, gpx_type, weak_rule, device_sport)
+          sport_conflict: 1 when equally-ranked hints disagree; fix with [overrides]
+          duration_s: moving_s, falling back to timer_s then elapsed_s
+          distance_source: laps (device lap totals), device (cumulative sensor distance) or gps (computed)
+          route: Simplified GeoJSON track
+          recording_count: Number of recordings (files/segments) merged into this activity
+      laps:
+        description: Lap summaries from TCX files (primary recording only).
+      trackpoints:
+        description: Every sample of the primary recording. Use the activity_points query to map one activity.
+      recordings:
+        description: >-
+          Every parsed file/segment and what happened to it - primary, duplicate
+          (merged into another recording's activity), fragment (too short) or empty.
+        facets: [role, format]
+      source_files:
+        description: Files seen by the importer, with parse status.
+        facets: [status, format]
+    queries:
+      monthly_totals:
+        title: Monthly totals by sport
+        sql: |-
+          select month, sport,
+            count(*) as activities,
+            round(sum(distance_m) / 1000, 1) as km,
+            round(sum(duration_s) / 3600.0, 1) as hours,
+            round(sum(ascent_m)) as ascent_m
+          from activities
+          where (:sport = '' or sport = :sport)
+          group by month, sport
+          order by month desc, hours desc
+      yearly_by_category:
+        title: Yearly totals by category
+        sql: |-
+          select year, sport_category,
+            count(*) as activities,
+            round(sum(distance_m) / 1000, 1) as km,
+            round(sum(duration_s) / 3600.0, 1) as hours,
+            round(sum(calories)) as calories
+          from activities
+          group by year, sport_category
+          order by year, hours desc
+      weekly_volume:
+        title: Weekly training volume
+        sql: |-
+          select iso_week,
+            count(*) as activities,
+            round(sum(duration_s) / 3600.0, 2) as hours,
+            round(sum(distance_m) / 1000, 1) as km,
+            group_concat(distinct sport) as sports
+          from activities
+          group by iso_week
+          order by iso_week desc
+      longest_by_sport:
+        title: Top 5 longest activities per sport
+        sql: |-
+          select * from (
+            select sport, id, name, local_date,
+              round(distance_m / 1000, 2) as km,
+              round(duration_s / 3600.0, 2) as hours,
+              row_number() over (partition by sport order by distance_m desc) as rank
+            from activities where distance_m is not null
+          ) where rank <= 5
+          order by sport, rank
+      running_pace:
+        title: Running pace over time
+        sql: |-
+          select local_date, name,
+            round(distance_m / 1000, 2) as km,
+            printf('%d:%02d', (duration_s / (distance_m / 1000)) / 60,
+                              cast(duration_s / (distance_m / 1000) as int) % 60) as pace_per_km,
+            avg_hr
+          from activities
+          where sport = 'running' and distance_m > 500 and duration_s > 0
+          order by start_utc
+      heart_rate_by_sport:
+        title: Heart rate by sport (activities with HR only)
+        sql: |-
+          select sport, count(*) as activities,
+            round(avg(avg_hr), 1) as mean_avg_hr,
+            max(max_hr) as peak_hr
+          from activities where has_hr
+          group by sport order by activities desc
+      time_of_day:
+        title: When do I train? (local hour x weekday)
+        sql: |-
+          select weekday, hour, count(*) as activities,
+            round(sum(duration_s) / 3600.0, 1) as hours
+          from activities
+          group by weekday, hour
+          order by hours desc
+      activity_points:
+        title: Map a single activity's trackpoints
+        description: Pass an activity id, e.g. 20170609T153633Z
+        sql: |-
+          select seq, time_utc, lat as latitude, lon as longitude,
+            elevation_m, heart_rate, cadence, distance_m
+          from trackpoints
+          where activity_id = :id and lat is not null
+          order by seq
+      routes_for_sport:
+        title: Route maps for a sport
+        sql: |-
+          select id, name, local_date, round(distance_m / 1000, 1) as km, route
+          from activities
+          where sport = :sport and route is not null
+          order by start_utc desc
+      data_quality:
+        title: Data coverage by year
+        sql: |-
+          select year, count(*) as activities,
+            sum(has_gps) as with_gps,
+            sum(has_hr) as with_hr,
+            sum(has_cadence) as with_cadence,
+            sum(has_elevation) as with_elevation,
+            sum(sport = 'other') as unclassified,
+            sum(timezone_source = 'default') as default_timezone
+          from activities group by year order by year
+      needs_review:
+        title: Activities needing review (unclassified or conflicting sport)
+        sql: |-
+          select id, local_date, name, sport, sport_candidates, sport_conflict, source_file
+          from activities
+          where sport = 'other' or sport_conflict
+          order by start_utc

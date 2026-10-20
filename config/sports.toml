@@ -1,0 +1,144 @@
+# Activity-heat import configuration.
+#
+# Sport resolution order (first hit wins):
+#   1. [overrides]  - exact source file name or activity id
+#   2. [[rules]]    - regex searched in the activity title and file name (not the free-text description)
+#   3. file label   - the sport word in exported TCX names, e.g. "..._Hiking.tcx"
+#   4. GPX <type>   - mapped through [labels]
+#   5. weak rules   - [[rules]] with weak = true (generic words like "Running" in a title)
+#   6. TCX Sport    - "Running" | "Biking" | "Other", mapped through [labels]
+# Generic labels ("Other") never win over a more specific source.
+
+# Used for local dates when an activity has no GPS position to derive a timezone from.
+default_timezone = "America/Los_Angeles"
+
+# Split GPX tracks when consecutive points are further apart than this.
+gpx_split_gap_hours = 6
+
+# GPX segments shorter than this (or with fewer points) are recorded as fragments, not activities.
+min_activity_seconds = 120
+min_activity_points = 10
+
+# Two recordings are the same activity when their time ranges overlap by at least this
+# fraction of the shorter one (e.g. a watch TCX and a handheld GPX of the same outing).
+duplicate_overlap_ratio = 0.5
+
+# Raw labels -> normalized sport. Keys are matched case-insensitively ignoring spaces/underscores.
+[labels]
+running = "running"
+run = "running"
+walking = "walking"
+hiking = "hiking"
+biking = "cycling"
+cycling = "cycling"
+road_biking = "cycling"
+mtnbiking = "mountain_biking"
+mountainbiking = "mountain_biking"
+rowing = "rowing"
+standuppaddling = "stand_up_paddling"
+swimming = "swimming"
+downhillskiing = "skiing"
+strengthtraining = "strength_training"
+gym = "strength_training"
+other = "other"
+
+[[rules]]
+pattern = "stationary bike|indoor (bike|cycl)|spin class|trainer ride"
+sport = "indoor_cycling"
+
+[[rules]]
+pattern = "paddle ?board|\\bSUP\\b|stand ?up paddl"
+sport = "stand_up_paddling"
+
+[[rules]]
+pattern = "windsurf"
+sport = "windsurfing"
+
+[[rules]]
+pattern = "kite ?(surf|board)"
+sport = "kitesurfing"
+
+[[rules]]
+pattern = "\\bsail|trimaran|\\bR2AK\\b"
+sport = "sailing"
+
+[[rules]]
+pattern = "kayak"
+sport = "kayaking"
+
+[[rules]]
+pattern = "snowshoe"
+sport = "snowshoeing"
+
+[[rules]]
+pattern = "orienteering|\\bWIOL\\b"
+sport = "orienteering"
+
+[[rules]]
+pattern = "multi-?sport"
+sport = "multisport"
+
+[[rules]]
+pattern = "\\bpaddl"
+sport = "paddling"
+
+# Generic words in titles (e.g. Garmin Connect's "Cle Elum Running" on an "_Other" file).
+[[rules]]
+pattern = "\\brun(ning)?\\b"
+sport = "running"
+weak = true
+
+[[rules]]
+pattern = "cycling|\\bbike ride|\\bride\\b"
+sport = "cycling"
+weak = true
+
+[[rules]]
+pattern = "\\bhik(e|ing)\\b"
+sport = "hiking"
+weak = true
+
+[[rules]]
+pattern = "\\bwalk(ing)?\\b"
+sport = "walking"
+weak = true
+
+[[rules]]
+pattern = "\\brow(ing)?\\b"
+sport = "rowing"
+weak = true
+
+# Uncomment/adjust if these GPX file-name prefixes mean what they appear to:
+[[rules]]
+pattern = "^WS\\d"
+sport = "windsurfing"
+[[rules]]
+pattern = "^PB\\d"
+sport = "stand_up_paddling"
+
+# Normalized sport -> broader category for roll-ups.
+[categories]
+running = "foot"
+walking = "foot"
+hiking = "foot"
+orienteering = "foot"
+snowshoeing = "snow"
+skiing = "snow"
+cycling = "cycling"
+mountain_biking = "cycling"
+indoor_cycling = "cycling"
+rowing = "water"
+kayaking = "water"
+paddling = "water"
+stand_up_paddling = "water"
+windsurfing = "water"
+kitesurfing = "water"
+sailing = "water"
+swimming = "water"
+strength_training = "gym"
+multisport = "other"
+other = "other"
+
+# Manual fixes: source file name (or activity id) -> sport.
+[overrides]
+# "2014-09-20_Walking.tcx" = "running"
