@@ -1,4 +1,4 @@
-# Activity-heat import configuration.
+# Activity-sette import configuration.
 #
 # Sport resolution order (first hit wins):
 #   1. [overrides]  - exact source file name or activity id
@@ -6,7 +6,7 @@
 #   3. file label   - the sport word in exported TCX names, e.g. "..._Hiking.tcx"
 #   4. GPX <type>   - mapped through [labels]
 #   5. weak rules   - [[rules]] with weak = true (generic words like "Running" in a title)
-#   6. TCX Sport    - "Running" | "Biking" | "Other", mapped through [labels]
+#   6. device sport - TCX Sport / FIT session sport, mapped through [labels]
 # Generic labels ("Other") never win over a more specific source.
 
 # Used for local dates when an activity has no GPS position to derive a timezone from.

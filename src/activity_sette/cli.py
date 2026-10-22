@@ -1,4 +1,4 @@
-"""Command line interface: ``activity-heat import`` and ``activity-heat inspect``."""
+"""Command line interface: ``activity-sette import`` and ``activity-sette inspect``."""
 
 from __future__ import annotations
 
@@ -10,10 +10,8 @@ import sys
 from pathlib import Path
 
 from . import sports, tz
-from .gpx import parse_gpx
-from .importer import run_import
+from .importer import parse_rec, run_import
 from .metrics import summarize
-from .tcx import parse_tcx
 
 DEFAULT_CONFIG = Path(os.environ.get("ACTIVITY_HEAT_CONFIG", "config/sports.toml"))
 DEFAULT_DB = Path(os.environ.get("ACTIVITY_HEAT_DB", "data/activities.db"))
@@ -53,7 +51,7 @@ def cmd_import(args) -> int:
 def cmd_inspect(args) -> int:
     cfg = _load_config(args.config)
     for path in args.files:
-        recs = parse_tcx(path) if path.suffix.lower() == ".tcx" else parse_gpx(path, cfg.gpx_split_gap_hours * 3600)
+        recs = parse_rec(path, cfg)
         for rec in recs:
             s = summarize(rec)
             hints = sports.candidates(rec, cfg)
@@ -67,13 +65,13 @@ def cmd_inspect(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="activity-heat", description=__doc__)
+    parser = argparse.ArgumentParser(prog="activity-sette", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help=f"TOML config (default {DEFAULT_CONFIG})")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("import", help="Parse files/directories and rebuild the database")
-    p.add_argument("paths", nargs="+", type=Path, help="TCX/GPX files or directories (searched recursively)")
+    p.add_argument("paths", nargs="+", type=Path, help="TCX/GPX/FIT files or directories (searched recursively)")
     p.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"SQLite database (default {DEFAULT_DB})")
     p.add_argument("--no-trackpoints", action="store_true", help="Skip the per-point trackpoints table")
     p.set_defaults(func=cmd_import)

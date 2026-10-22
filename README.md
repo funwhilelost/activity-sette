@@ -1,13 +1,15 @@
-# activity-heat
+# activity-sette
 
-Parse GPX/TCX fitness activity exports into a SQLite database and explore them in a
-local [Datasette](https://datasette.io) running in Docker.
+Parse FIT/GPX/TCX fitness activity exports (including native Garmin `.fit` files) into a
+SQLite database and explore them in a local [Datasette](https://datasette.io) running in Docker.
 
 ## Demo
 
 Opening the URL `http://localhost:8001/activities?sql=select+year%2C+sport_category%2C%0D%0A++count%28*%29+as+activities%2C%0D%0A++round%28sum%28distance_m%29+%2F+1000%2C+1%29+as+km%2C%0D%0A++round%28sum%28duration_s%29+%2F+3600.0%2C+1%29+as+hours%2C%0D%0A++round%28sum%28calories%29%29+as+calories%0D%0Afrom+activities%0D%0A---+where+sport_category+%3D+%27water%27%0D%0Agroup+by+year%2C+sport_category%0D%0Aorder+by+year%2C+hours+desc#g.mark=bar&g.x_column=year&g.x_type=ordinal&g.y_column=hours&g.y_type=quantitative&g.color_column=sport_category` will show this chart:
 
 ![Example Visualization](./visualization.png)
+
+`http://localhost:8001/activities?sql=select+month%2C+sport_category%2C%0D%0A++count%28*%29+as+activities%2C%0D%0A++round%28sum%28distance_m%29+%2F+1000%2C+1%29+as+km%2C%0D%0A++round%28sum%28duration_s%29+%2F+3600.0%2C+1%29+as+hours%2C%0D%0A++round%28sum%28ascent_m%29%29+as+ascent_m%0D%0Afrom+activities%0D%0Awhere+%28%3Asport+%3D+%27%27+or+sport+%3D+%3Asport%29%0D%0Agroup+by+month%2C+sport%0D%0Aorder+by+month+desc%2C+hours+desc&sport=#g.mark=bar&g.x_column=month&g.x_type=ordinal&g.y_column=hours&g.y_type=quantitative&g.color_column=sport_category`
 
 ## Quick start
 
@@ -32,7 +34,7 @@ docker compose run --rm importer inspect "/activities/2014-09-20_Walking.tcx"
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -e '.[timezones,dev]'
-.venv/bin/activity-heat import activities          # writes data/activities.db
+.venv/bin/activity-sette import activities          # writes data/activities.db
 .venv/bin/pytest
 ```
 
@@ -41,7 +43,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[timezones,dev]'
 | Table | Contents |
 |---|---|
 | `activities` | One row per real-world activity: sport, local/UTC times, distance, durations, elevation, HR, cadence, calories, start/end/bbox coordinates, simplified GeoJSON `route`, data-availability flags (`has_gps`, `has_hr`, …) |
-| `laps` | TCX lap summaries |
+| `laps` | TCX/FIT lap summaries |
 | `trackpoints` | Every sample (time, lat/lon, elevation, HR, cadence, distance) of each activity |
 | `recordings` | Every parsed file/segment and its role: `primary`, `duplicate`, `fragment`, `empty` |
 | `source_files` | Every file seen, with parse status/errors |
@@ -63,10 +65,11 @@ mounted into the container, so run `docker compose restart datasette` to apply y
   other sports.
 - **Duplicates.** Garmin exports often appear twice (`2013-01-08_Other.tcx` and
   `2013-01-08_12-28-05_Other.tcx`). A handheld GPS and a watch can also record the same
-  outing. Recordings that share a TCX `Id`, or whose time ranges overlap by at least 50%,
-  merge into one activity. The richest recording (HR, then TCX, then GPS point count) becomes
-  the primary. The other recordings stay visible in `recordings`. If the copies disagree on
-  sport (e.g. Running vs Walking), the activity gets `sport_conflict = 1`.
+  outing. Recordings that share an id (the TCX `Id`; FIT sessions use their start time,
+  which matches that convention), or whose time ranges overlap by at least 50%, merge into
+  one activity. The richest recording (HR, then native FIT/TCX, then GPS point count)
+  becomes the primary. The other recordings stay visible in `recordings`. If the copies
+  disagree on sport (e.g. Running vs Walking), the activity gets `sport_conflict = 1`.
 - **GPS "active logs".** GPSMAP GPX files can span weeks. Tracks are split at gaps longer than
   `gpx_split_gap_hours`. Tiny pieces are kept only as `fragment` recordings.
 - **Missing streams.** Metrics are null rather than zero when data is missing.

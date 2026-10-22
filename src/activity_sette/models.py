@@ -1,4 +1,4 @@
-"""Format-independent data model shared by the TCX and GPX parsers."""
+"""Format-independent data model shared by the TCX, GPX, and FIT parsers."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class Point:
     ele: float | None = None
     hr: int | None = None
     cadence: int | None = None
-    # Cumulative distance reported by the device (TCX only); may exist without GPS (foot pod, speed sensor).
+    # Cumulative distance reported by the device (TCX/FIT); may exist without GPS (foot pod, speed sensor).
     distance: float | None = None
     speed: float | None = None
 
@@ -47,7 +47,7 @@ class Recording:
     """
 
     source_file: str
-    source_format: str  # "tcx" | "gpx"
+    source_format: str  # "tcx" | "gpx" | "fit"
     segment: int = 0
     external_id: str | None = None
     device: str | None = None

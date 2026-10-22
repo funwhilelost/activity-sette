@@ -139,11 +139,15 @@ def summarize(rec: Recording) -> dict:
     }
 
 
+# Native device data is preferred over exports when duplicate recordings are otherwise equal.
+_FORMAT_RANK = {"fit": 2, "tcx": 1}
+
+
 def richness(rec: Recording, summary: dict) -> tuple:
     """Sort key used to pick the best recording when several describe one activity."""
     return (
         summary["has_hr"],
-        rec.source_format == "tcx",
+        _FORMAT_RANK.get(rec.source_format, 0),
         summary["gps_point_count"],
         summary["point_count"],
         rec.source_file,

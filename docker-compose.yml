@@ -1,7 +1,7 @@
 services:
   datasette:
     build: .
-    image: activity-heat:latest
+    image: activity-sette:latest
     ports:
       - "8001:8001"
     volumes:
@@ -11,9 +11,9 @@ services:
 
   # One-off tool container: docker compose run --rm importer import /activities
   importer:
-    image: activity-heat:latest
+    image: activity-sette:latest
     profiles: ["tools"]
-    entrypoint: ["activity-heat"]
+    entrypoint: ["activity-sette"]
     command: ["import", "/activities"]
     volumes:
       - ./activities:/activities:ro

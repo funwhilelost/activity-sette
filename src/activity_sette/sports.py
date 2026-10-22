@@ -48,7 +48,7 @@ class Config:
         )
 
     def normalize_label(self, raw: str | None) -> str | None:
-        if not raw:
+        if not isinstance(raw, str) or not raw.strip():
             return None
         key = _norm_key(raw)
         return self.labels.get(key) or re.sub(r"[^a-z0-9]+", "_", raw.strip().lower()).strip("_") or None

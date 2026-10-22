@@ -1,12 +1,14 @@
 from pathlib import Path
 
+import pytest
 import sqlite_utils
 
-from activity_heat import sports
-from activity_heat.gpx import parse_gpx
-from activity_heat.importer import run_import
-from activity_heat.metrics import summarize
-from activity_heat.tcx import parse_filename, parse_tcx
+from activity_sette import sports
+from activity_sette.fit import parse_fit
+from activity_sette.gpx import parse_gpx
+from activity_sette.importer import run_import
+from activity_sette.metrics import summarize
+from activity_sette.tcx import parse_filename, parse_tcx
 
 from .conftest import minute_times
 
@@ -68,7 +70,7 @@ def test_gpx_bom_hr_and_gap_split(write_gpx):
 
 def test_sport_priority():
     c = cfg()
-    from activity_heat.models import Recording
+    from activity_sette.models import Recording
 
     def rec(**kw):
         return Recording(source_file=kw.pop("source_file", "x.tcx"), source_format="tcx", **kw)
@@ -92,6 +94,71 @@ def test_sport_priority():
     # Overrides win
     c.overrides["a"] = "running"
     assert sports.resolve([rec(file_label="Walking")], c, "a")["sport"] == "running"
+
+
+def test_fit_parse_summary(write_fit):
+    (rec,) = parse_fit(write_fit("2015-06-01_Running.fit", sport="running"))
+    assert rec.source_format == "fit"
+    assert rec.external_id == "2015-06-01T10:00:00Z"  # matches the TCX Id convention
+    assert rec.device == "Garmin edge500"
+    assert rec.device_sport == "running"
+    assert len(rec.points) == 30 and len(rec.laps) == 1
+    p0 = rec.points[0]
+    assert p0.time.isoformat() == "2015-06-01T10:00:00+00:00"
+    assert abs(p0.lat - 47.6) < 1e-6 and abs(p0.lon - -122.3) < 1e-6
+    assert abs(p0.ele - 10) < 0.25  # altitude scale/offset applied
+    assert rec.points[3].distance == pytest.approx(3 * 22.2, abs=0.02)
+    assert rec.points[0].speed == pytest.approx(2.5)
+    lap = rec.laps[0]
+    assert lap.timer_s == pytest.approx(290) and lap.calories == 150
+    assert lap.avg_hr == pytest.approx(124, abs=1) and lap.max_hr == 129
+
+    s = summarize(rec)
+    assert s["has_gps"] and s["has_hr"]
+    assert s["elapsed_s"] == 290
+    assert s["distance_m"] == pytest.approx(29 * 22.2)
+    assert s["distance_source"] == "laps"
+    assert 120 <= s["avg_hr"] <= 129
+
+
+def test_fit_without_gps_or_hr(write_fit):
+    (rec,) = parse_fit(write_fit("2015-06-01_Gym.fit", sport="generic", gps=False, hr=False))
+    assert rec.device_sport == "other"  # FIT "generic" maps to the generic label
+    s = summarize(rec)
+    assert not s["has_gps"] and not s["has_hr"]
+    assert s["distance_m"] > 0 and s["distance_source"] == "laps"
+
+
+def test_fit_unrecognized_sport_enum(write_fit):
+    """Sport ids added by devices newer than the fitparse profile decode as raw ints."""
+    (rec,) = parse_fit(write_fit("2015-06-01_NewGadget.fit", sport="unrecognized"))
+    assert rec.device_sport is None
+    # ...and must not break sport resolution
+    assert sports.resolve([rec], cfg(), "a")["sport"] == "other"
+
+
+def test_fit_dedupes_with_tcx_export(tmp_path, write_tcx, write_fit):
+    """A FIT file and the TCX export of the same activity merge into one."""
+    src = tmp_path / "src"
+    src.mkdir()
+    a = write_tcx("2015-06-01_10-00-00_Running.tcx", sport="Running", hr=False)
+    b = write_fit("2015-06-01_Running.fit", sport="running", n=31)
+    for p in (a, b):
+        p.rename(src / p.name)
+
+    db_path = tmp_path / "out.db"
+    result = run_import([src], db_path, cfg())
+    assert len(result.activities) == 1
+
+    db = sqlite_utils.Database(db_path)
+    (act,) = db["activities"].rows
+    assert act["source_file"] == "2015-06-01_Running.fit"  # richest: HR + native format
+    assert act["recording_count"] == 2
+    assert act["sport"] == "running"
+
+    roles = {r["file"]: r["role"] for r in db["recordings"].rows}
+    assert roles["2015-06-01_Running.fit"] == "primary"
+    assert roles["2015-06-01_10-00-00_Running.tcx"] == "duplicate"
 
 
 def test_import_dedupes_and_types(tmp_path, write_tcx, write_gpx):

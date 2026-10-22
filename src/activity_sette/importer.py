@@ -12,6 +12,7 @@ from pathlib import Path
 import sqlite_utils
 
 from . import sports, tz
+from .fit import parse_fit
 from .gpx import parse_gpx
 from .metrics import richness, summarize
 from .models import Recording
@@ -19,7 +20,16 @@ from .tcx import parse_tcx
 
 log = logging.getLogger(__name__)
 
-PARSERS = {".tcx": "tcx", ".gpx": "gpx"}
+PARSERS = {".tcx": "tcx", ".gpx": "gpx", ".fit": "fit"}
+
+_PARSER_FUNCS = {".tcx": parse_tcx, ".gpx": parse_gpx, ".fit": parse_fit}
+
+
+def parse_rec(path: Path, cfg: sports.Config) -> list[Recording]:
+    fmt = PARSERS[path.suffix.lower()]
+    if fmt == "gpx":
+        return parse_gpx(path, cfg.gpx_split_gap_hours * 3600)
+    return _PARSER_FUNCS[path.suffix.lower()](path)
 
 
 @dataclass
@@ -57,8 +67,8 @@ def parse_files(files: list[Path], cfg: sports.Config, result: ImportResult) -> 
         fmt = PARSERS[path.suffix.lower()]
         entry = {"file": path.name, "path": str(path), "format": fmt, "size_bytes": path.stat().st_size}
         try:
-            recs = parse_tcx(path) if fmt == "tcx" else parse_gpx(path, cfg.gpx_split_gap_hours * 3600)
-        except Exception as e:  # malformed XML etc. - record and keep going
+            recs = parse_rec(path, cfg)
+        except Exception as e:  # malformed file etc. - record and keep going
             log.warning("Failed to parse %s: %s", path.name, e)
             result.files.append({**entry, "status": "error", "error": str(e), "recordings": 0})
             continue
